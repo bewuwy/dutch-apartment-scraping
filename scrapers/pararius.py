@@ -1,4 +1,4 @@
-"""Pararius scraper leveraging external_tools/pararius-scraper card parsing."""
+"""Pararius scraper leveraging external_tools/pararius-scraper with detail enrichment."""
 
 import sys
 import os
@@ -8,14 +8,13 @@ from typing import List
 from models import Listing
 from scrapers.base import BaseScraper
 
-# Add external tool to sys.path end for its internal imports without shadowing root modules
 PARARIUS_TOOL_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "external_tools", "pararius-scraper")
 )
 if PARARIUS_TOOL_DIR not in sys.path:
     sys.path.append(PARARIUS_TOOL_DIR)
 
-from utils import parse_property_cards
+from utils import parse_property_cards, parse_detail_page
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +29,7 @@ class ParariusScraper(BaseScraper):
         from playwright.sync_api import sync_playwright
 
         max_rent = self.search_criteria.get("max_rent_eur", 2000)
+        min_size = self.search_criteria.get("min_size_m2", 0)
         location = self.search_criteria.get("location", "amsterdam").lower()
 
         search_url = f"https://www.pararius.nl/huurwoningen/{location}/0-{max_rent}"
@@ -53,18 +53,41 @@ class ParariusScraper(BaseScraper):
                 raw_properties = parse_property_cards(html)
                 logger.info("[Pararius] Parsed %d property cards.", len(raw_properties))
 
+                # Filter down to candidates matching budget and minimum area
+                candidates = []
                 for p_data in raw_properties:
                     price = p_data.get("price")
                     if price is not None and price > max_rent:
                         continue
+                    area = p_data.get("living_area")
+                    if min_size and area and area < min_size:
+                        continue
+                    candidates.append(p_data)
 
+                # Enrich candidate properties with descriptions & details (up to 12 per run)
+                max_enrich = 12
+                for idx, p_data in enumerate(candidates):
                     url = p_data.get("url", "")
-                    title = p_data.get("street_address")
+                    description = ""
+                    if idx < max_enrich and url:
+                        try:
+                            logger.debug("[Pararius] Fetching details for %s", url)
+                            page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                            page.wait_for_timeout(1000)
+                            details = parse_detail_page(page.content())
+                            description = details.get("description", "")
+                            # Merge details into p_data
+                            p_data.update(details)
+                        except Exception as e:
+                            logger.debug("[Pararius] Could not fetch detail page for %s: %s", url, e)
+
+                    title = p_data.get("title") or p_data.get("street_address")
                     if not title or title == "Pararius Listing":
                         parts = url.rstrip("/").split("/")
                         street_slug = parts[-1] if parts else "Property"
                         title = f"Appartement {street_slug.replace('-', ' ').title()}"
-                    prop_id = p_data.get("listing_id") or url.split("/")[-1]
+
+                    prop_id = p_data.get("listing_id") or (url.split("/")[-1] if url else f"pararius_{idx}")
 
                     url_lower = url.lower()
                     if "appartement" in url_lower:
@@ -82,7 +105,7 @@ class ParariusScraper(BaseScraper):
                         id=f"pararius_{prop_id}",
                         title=title,
                         url=url,
-                        price=price,
+                        price=p_data.get("price"),
                         city=p_data.get("city", location.capitalize()),
                         address=p_data.get("street_address"),
                         postal_code=p_data.get("postal_code"),
@@ -92,7 +115,7 @@ class ParariusScraper(BaseScraper):
                         living_area_m2=p_data.get("living_area"),
                         rooms=p_data.get("rooms"),
                         interior=p_data.get("interior"),
-                        description="",
+                        description=description,
                         is_available=True,
                         raw_data=p_data,
                     )

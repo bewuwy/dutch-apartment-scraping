@@ -5,8 +5,9 @@ A Python-based scraper, filter, and Telegram notification tool for the Dutch ren
 ## Features
 
 - **Multi-Source Scraping:**
-  - **Pararius:** Automated search using Playwright for any municipality.
-  - **Kamernet:** Direct Next.js page data extraction for apartments, studios, and rooms.
+  - **Pararius:** Automated search and detail enrichment using Playwright.
+  - **Kamernet:** Direct Next.js page data extraction and listing detail enrichment (registration, pets, deposit).
+  - **Funda:** Nationwide rental listing scraper leveraging reverse-engineered mobile APIs.
   - **Custom Agency Scrapers:** Dynamic auto-discovery for agency scrapers. Dropping any class inheriting from `BaseScraper` into `scrapers/` runs it automatically.
 - **Tenancy-Aware Filtering:**
   - Evaluates Dutch rental specifics: municipal registration (*gemeente inschrijving*), independent vs. shared accommodation, pet policies, and student/guarantor acceptance.
@@ -153,7 +154,8 @@ class MyAgencyScraper(BaseScraper):
 ├── scrapers/                # Scraper modules
 │   ├── base.py              # BaseScraper abstract base class
 │   ├── pararius.py          # Pararius scraper (Playwright)
-│   └── kamernet.py          # Kamernet scraper (Next.js data extraction)
+│   ├── kamernet.py          # Kamernet scraper (Next.js data extraction)
+│   └── funda.py             # Funda scraper (pyfunda)
 ├── filters/
 │   └── agent_filter.py      # Tenancy rules and criteria evaluator
 ├── notifications/

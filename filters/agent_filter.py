@@ -229,25 +229,55 @@ class RentalFilter:
             flags.append("Municipal registration confirmed")
             score += 5
 
-        # Check Kamernet metadata if available
-        if listing.source == "kamernet" and listing.raw_data:
-            if listing.raw_data.get("isRegistrationAllowed") is False:
-                registration_possible = False
-                if self.require_registration:
-                    reasons.append("Kamernet metadata: registration not allowed")
-                    status = "REJECTED"
-                    score = 0
-                else:
-                    flags.append("Kamernet metadata: registration not allowed")
+        # 8. Check explicit portal metadata (Kamernet, Pararius, Funda)
+        meta_reg = listing.raw_data.get("registration_allowed")
+        if meta_reg is None:
+            meta_reg = listing.raw_data.get("isRegistrationAllowed")
+        if meta_reg is False:
+            registration_possible = False
+            if self.require_registration:
+                reasons.append("Portal metadata confirms registration is not allowed")
+                status = "REJECTED"
+                score = 0
+            else:
+                flags.append("Registration not permitted per metadata")
+        elif meta_reg is True and registration_possible is None:
+            registration_possible = True
+            flags.append("Registration permitted per specifications")
+            score += 5
 
-            if listing.raw_data.get("candidatePetsAllowed") is False:
-                pets_allowed = False
-                if self.reject_explicit_no_pets:
-                    reasons.append("Kamernet metadata: pets not allowed")
+        meta_pets = listing.raw_data.get("pets_allowed")
+        if meta_pets is None:
+            meta_pets = listing.raw_data.get("candidatePetsAllowed")
+        if meta_pets is False:
+            pets_allowed = False
+            if self.reject_explicit_no_pets:
+                reasons.append("Portal metadata confirms pets not allowed")
+                status = "REJECTED"
+                score = 0
+            else:
+                flags.append("Pets not allowed per metadata")
+                score -= 10
+        elif meta_pets is True and pets_allowed is None:
+            pets_allowed = True
+            flags.append("Pets allowed per specifications")
+            score += 10
+
+        suitable_persons = listing.raw_data.get("suitable_for_persons")
+        if suitable_persons is not None and couples_allowed is None:
+            if suitable_persons == 1:
+                couples_allowed = False
+                if self.reject_single_only:
+                    reasons.append("Portal specifications restrict occupancy to 1 person")
                     status = "REJECTED"
                     score = 0
                 else:
-                    flags.append("Kamernet metadata: pets not allowed")
+                    flags.append("Single occupant only per metadata")
+            elif suitable_persons >= 2:
+                couples_allowed = True
+                flags.append(f"Suitable for {suitable_persons} occupants")
+                score += 10
+
 
         return FilterEvaluation(
             listing=listing,

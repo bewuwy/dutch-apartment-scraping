@@ -13,8 +13,9 @@
   - `FilterEvaluation`: Dataclass capturing filter verdicts (`MATCH`, `NEEDS_REVIEW`, `REJECTED`), heuristic score (0–100), flags, reasons, review metadata (`ai_checked`, `ai_verdict`, `ai_score`, `ai_rationale`), and notification state (`alerted`).
 - **`scrapers/`**:
   - `base.py`: Contains `BaseScraper` abstract class. Requires implementing `scrape(self) -> List[Listing]`.
-  - `pararius.py`: Nationwide scraper using Playwright and card parsing utilities.
-  - `kamernet.py`: Nationwide scraper extracting Next.js JSON state for apartments and studios.
+  - `pararius.py`: Nationwide scraper using Playwright, card parsing, and detail enrichment.
+  - `kamernet.py`: Nationwide scraper extracting Next.js JSON state and enriched detail properties.
+  - `funda.py`: Nationwide scraper leveraging `pyfunda` for Funda.nl rental listings.
   - `*`: Any additional file under `scrapers/` containing a subclass of `BaseScraper` is automatically discovered and executed by `main.py`.
 - **`filters/agent_filter.py`**:
   - `RentalFilter` (aliased as `AgentFilter`): Evaluates listings against `config.json` rules:

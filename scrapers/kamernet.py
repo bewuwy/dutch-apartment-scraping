@@ -1,4 +1,4 @@
-"""Kamernet scraper leveraging Next.js page data extraction."""
+"""Kamernet scraper leveraging Next.js page data extraction and detail enrichment."""
 
 import sys
 import os
@@ -11,7 +11,7 @@ KAMERNET_TOOL_DIR = os.path.abspath(
 if KAMERNET_TOOL_DIR not in sys.path:
     sys.path.insert(0, KAMERNET_TOOL_DIR)
 
-from radar.fetch import make_session, _extract_next_data
+from radar.fetch import make_session, _extract_next_data, fetch_listing_details
 from models import Listing
 from scrapers.base import BaseScraper
 
@@ -27,6 +27,7 @@ BASE_URL = "https://kamernet.nl"
 class KamernetScraper(BaseScraper):
     def scrape(self) -> List[Listing]:
         max_rent = self.search_criteria.get("max_rent_eur", 2000)
+        min_size = self.search_criteria.get("min_size_m2", 0)
         session = make_session(USER_AGENT)
         listings: List[Listing] = []
         seen_ids = set()
@@ -60,14 +61,26 @@ class KamernetScraper(BaseScraper):
                     if price and price > max_rent:
                         continue
 
-                    city_slug = item.get("citySlug") or loc
-                    street_slug = item.get("streetSlug") or ""
+                    surface = float(item["surfaceArea"]) if item.get("surfaceArea") else None
+                    if min_size and surface and surface < min_size:
+                        continue
+
+                    # Enrich qualifying listing with detail page description and rules
+                    try:
+                        enriched = fetch_listing_details(item, session)
+                    except Exception as exc:
+                        logger.debug("[Kamernet] Detail enrichment skipped for %s: %s", listing_id, exc)
+                        enriched = item
+
+                    city_slug = enriched.get("citySlug") or loc
+                    street_slug = enriched.get("streetSlug") or ""
                     detail_url = f"{BASE_URL}/huren/{city_slug}/{street_slug}/{listing_id}" if street_slug else url
 
-                    title = item.get("title") or f"{item.get('listingType', 'Property')} in {city_slug.capitalize()}"
+                    title = enriched.get("detailed_title") or enriched.get("title") or f"{enriched.get('listingType', 'Property')} in {city_slug.capitalize()}"
+                    description = enriched.get("detailed_description") or enriched.get("description") or ""
 
                     type_map = {1: "room", 2: "apartment", 3: "studio", 4: "anti-squat"}
-                    raw_type = item.get("listingType")
+                    raw_type = enriched.get("listingType")
                     if isinstance(raw_type, int):
                         ptype = type_map.get(raw_type, "apartment")
                     elif isinstance(raw_type, str):
@@ -75,23 +88,27 @@ class KamernetScraper(BaseScraper):
                     else:
                         ptype = "apartment"
 
+                    rooms = enriched.get("num_rooms") or enriched.get("numberOfRooms")
+                    postal_code = enriched.get("postal_code") or enriched.get("postalCode")
+                    address = enriched.get("street") or enriched.get("streetName")
+
                     listing = Listing(
                         id=f"kamernet_{listing_id}",
                         title=title,
                         url=detail_url,
                         price=price,
                         city=city_slug.capitalize(),
-                        address=item.get("streetName"),
-                        postal_code=item.get("postalCode"),
-                        neighborhood=item.get("neighborhood"),
+                        address=address,
+                        postal_code=postal_code,
+                        neighborhood=enriched.get("neighborhood"),
                         source="kamernet",
                         property_type=ptype,
-                        living_area_m2=float(item["surfaceArea"]) if item.get("surfaceArea") else None,
-                        rooms=item.get("numberOfRooms"),
-                        interior=item.get("furnishType"),
-                        description="",
+                        living_area_m2=surface,
+                        rooms=rooms,
+                        interior=enriched.get("furnishType"),
+                        description=description,
                         is_available=True,
-                        raw_data=item,
+                        raw_data=enriched,
                     )
                     listings.append(listing)
 

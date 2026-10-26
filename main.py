@@ -18,6 +18,7 @@ from models import Listing, FilterEvaluation
 from scrapers.base import BaseScraper
 from scrapers.pararius import ParariusScraper
 from scrapers.kamernet import KamernetScraper
+from scrapers.funda import FundaScraper
 from filters.agent_filter import RentalFilter
 from notifications.telegram import TelegramNotifier
 
@@ -54,11 +55,12 @@ def load_all_scrapers(config: Dict[str, Any]) -> List[Tuple[str, BaseScraper]]:
     scrapers: List[Tuple[str, BaseScraper]] = [
         ("Pararius", ParariusScraper(config)),
         ("Kamernet", KamernetScraper(config)),
+        ("Funda", FundaScraper(config)),
     ]
 
     # Auto-discover any additional custom or local agency scrapers in scrapers/
     for _, module_name, _ in pkgutil.iter_modules(scrapers_pkg.__path__):
-        if module_name in ("base", "pararius", "kamernet"):
+        if module_name in ("base", "pararius", "kamernet", "funda"):
             continue
         try:
             mod = importlib.import_module(f"scrapers.{module_name}")
