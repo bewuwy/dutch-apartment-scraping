@@ -14,7 +14,7 @@ class Listing:
     address: Optional[str] = None
     postal_code: Optional[str] = None
     neighborhood: Optional[str] = None
-    source: str = ""  # pararius, kamernet, 123wonen, nederwoon, tweelwonen, livingtoday
+    source: str = ""  # pararius, kamernet, or local agency
     property_type: Optional[str] = None  # apartment, studio, room, house
     living_area_m2: Optional[float] = None
     rooms: Optional[int] = None
@@ -40,7 +40,7 @@ class FilterEvaluation:
     registration_possible: Optional[bool] = None
     is_private_no_roommates: Optional[bool] = None
 
-    # AI Verification metadata (populated when run by an AI Agent)
+    # Review metadata
     ai_checked: bool = False
     ai_verdict: Optional[str] = None  # "STRONG_MATCH", "POTENTIAL_MATCH", "DISQUALIFIED"
     ai_score: Optional[int] = None    # 0 to 100
@@ -49,16 +49,21 @@ class FilterEvaluation:
     ai_cons: List[str] = field(default_factory=list)
 
     # Notification tracking
-    alerted_standalone: bool = False
-    alerted_ai: bool = False
+    alerted: bool = False
+    alerted_standalone: bool = False  # retained for backward compatibility
+    alerted_ai: bool = False          # retained for backward compatibility
 
     def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        data["listing"] = self.listing.to_dict()
-        return data
+        return asdict(self)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "FilterEvaluation":
-        listing_data = data.pop("listing")
-        listing = Listing(**listing_data)
-        return cls(listing=listing, **data)
+        data_copy = dict(data)
+        listing_data = data_copy.pop("listing")
+        listing = Listing(**listing_data) if isinstance(listing_data, dict) else listing_data
+        data_copy["alerted"] = data_copy.get(
+            "alerted",
+            data_copy.get("alerted_standalone", False) or data_copy.get("alerted_ai", False),
+        )
+        return cls(listing=listing, **data_copy)
+

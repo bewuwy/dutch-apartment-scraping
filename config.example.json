@@ -1,54 +1,26 @@
 {
-  "tenant_profile": {
-    "tenants": "Couple / Individual",
-    "occupants_count": 2,
-    "status": "Working professional / Student",
-    "income": "Employment salary / Guarantor",
-    "pets": {
-      "has_pets": false,
-      "details": "None"
-    },
-    "registration_required": true,
-    "registration_count": 2
-  },
   "search_criteria": {
-    "location": "Amsterdam",
-    "radius_km": 10,
-    "surrounding_municipalities": [],
+    "location": "amsterdam",
     "max_rent_eur": 2000,
-    "furnishing_preference": "gestoffeerd",
-    "allow_furnished": true,
-    "allow_temporary_contracts": true,
-    "accommodation_type": "independent_private",
     "min_size_m2": 0,
-    "min_bedrooms": 0,
-    "move_in_date": null
+    "min_bedrooms": 0
   },
   "filter_rules": {
     "reject_roommates_or_shared_housing": true,
     "reject_single_occupant_only": true,
     "reject_explicit_no_pets": false,
-    "keep_pets_negotiable_or_unmentioned": true,
-    "reject_no_students_unless_guarantors_allowed": true,
-    "prioritize_guarantors_allowed": true,
-    "require_registration_possible": true
+    "require_registration_possible": true,
+    "reject_no_students_unless_guarantors_allowed": true
   },
-  "target_platforms": {
-    "national_portals": [
-      {
-        "name": "Pararius",
-        "url": "https://www.pararius.nl/huurwoningen/amsterdam/0-2000",
-        "enabled": true
-      },
-      {
-        "name": "Kamernet",
-        "url": "https://kamernet.nl/huren/appartement-amsterdam",
-        "enabled": true
-      }
-    ],
-    "local_agencies": []
+  "tenant_profile": {
+    "tenants": "Couple / Individual",
+    "occupants_count": 2,
+    "status": "Working professional / Student",
+    "income": "Employment salary / Guarantor",
+    "has_pets": false,
+    "registration_required": true
   },
   "telegram": {
-    "run_mode": "on-demand"
+    "max_alerts_per_run": 5
   }
 }

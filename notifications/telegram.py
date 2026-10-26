@@ -3,7 +3,7 @@
 import os
 import logging
 import requests
-from typing import Optional, Dict, Any
+from typing import Optional
 from dotenv import load_dotenv
 from models import FilterEvaluation
 
@@ -22,15 +22,14 @@ class TelegramNotifier:
             and self.chat_id != "123456789"
         )
 
-    def format_message(self, eval_item: FilterEvaluation, is_ai_mode: bool = False) -> str:
+    def format_message(self, eval_item: FilterEvaluation) -> str:
         listing = eval_item.listing
-        city_prefix = f"{listing.city} " if listing.city else ""
+        city_prefix = f"[{listing.city}] " if listing.city else ""
 
-        if eval_item.ai_checked or is_ai_mode:
-            score_text = f" - {eval_item.ai_score}/100" if eval_item.ai_score else ""
-            header = f"<b>{city_prefix}Rental Alert (AI verified{score_text})</b>"
+        if eval_item.ai_checked and eval_item.ai_score:
+            header = f"<b>{city_prefix}Rental Alert ({eval_item.ai_score}/100)</b>"
         elif eval_item.status == "NEEDS_REVIEW":
-            header = f"<b>{city_prefix}Rental Alert (Unsure match)</b>"
+            header = f"<b>{city_prefix}Rental Alert (Review Recommended)</b>"
         else:
             header = f"<b>{city_prefix}Rental Alert</b>"
 
@@ -65,11 +64,11 @@ class TelegramNotifier:
 
         return "\n".join(lines)
 
-    def send_alert(self, eval_item: FilterEvaluation, is_ai_mode: bool = False) -> bool:
-        message = self.format_message(eval_item, is_ai_mode=is_ai_mode)
+    def send_alert(self, eval_item: FilterEvaluation, **kwargs) -> bool:
+        message = self.format_message(eval_item)
 
         if not self.is_configured:
-            logger.info("[Telegram] Dry-Run Mode. Message preview:\n" + message)
+            logger.info("Telegram not configured or in dry-run mode. Message preview:\n%s", message)
             print("\n" + "=" * 60)
             print(f"TELEGRAM ALERT [DRY RUN]: {eval_item.listing.title}")
             print(f"Status: {eval_item.status} | URL: {eval_item.listing.url}")
@@ -87,11 +86,11 @@ class TelegramNotifier:
         try:
             resp = requests.post(api_url, json=payload, timeout=10)
             if resp.status_code == 200:
-                logger.info(f"[Telegram] Alert sent for {eval_item.listing.title}")
+                logger.info("Telegram alert sent for %s", eval_item.listing.title)
                 return True
             else:
-                logger.warning(f"[Telegram] Failed to send alert: {resp.text}")
+                logger.warning("Failed to send Telegram alert: %s", resp.text)
                 return False
         except Exception as e:
-            logger.error(f"[Telegram] Request exception: {e}")
+            logger.error("Telegram request error: %s", e)
             return False

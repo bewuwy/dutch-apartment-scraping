@@ -1,11 +1,9 @@
-"""Kamernet scraper leveraging external_tools/kamernet-radar components."""
+"""Kamernet scraper leveraging Next.js page data extraction."""
 
 import sys
 import os
 import logging
-import json
-import re
-from typing import List, Dict, Any
+from typing import List
 
 KAMERNET_TOOL_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "external_tools", "kamernet-radar")
@@ -33,17 +31,16 @@ class KamernetScraper(BaseScraper):
         listings: List[Listing] = []
         seen_ids = set()
 
-        # Search apartments and studios for target city to avoid shared flatshares
-        loc = self.search_criteria.get("location", "leiden").lower()
+        loc = self.search_criteria.get("location", "amsterdam").lower()
         slugs = [f"appartement-{loc}", f"studio-{loc}"]
 
         for slug in slugs:
             url = f"{BASE_URL}/huren/{slug}"
-            logger.info(f"[Kamernet] Fetching {url}...")
+            logger.info("[Kamernet] Fetching %s...", url)
             try:
                 resp = session.get(url, timeout=20)
                 if resp.status_code != 200:
-                    logger.warning(f"[Kamernet] Status {resp.status_code} for {url}")
+                    logger.warning("[Kamernet] HTTP %d for %s", resp.status_code, url)
                     continue
 
                 data = _extract_next_data(resp.text)
@@ -68,8 +65,7 @@ class KamernetScraper(BaseScraper):
                     detail_url = f"{BASE_URL}/huren/{city_slug}/{street_slug}/{listing_id}" if street_slug else url
 
                     title = item.get("title") or f"{item.get('listingType', 'Property')} in {city_slug.capitalize()}"
-                    
-                    # Kamernet listingType can be int: 1=Room, 2=Apartment, 3=Studio
+
                     type_map = {1: "room", 2: "apartment", 3: "studio", 4: "anti-squat"}
                     raw_type = item.get("listingType")
                     if isinstance(raw_type, int):
@@ -79,7 +75,6 @@ class KamernetScraper(BaseScraper):
                     else:
                         ptype = "apartment"
 
-                    # Create Listing model
                     listing = Listing(
                         id=f"kamernet_{listing_id}",
                         title=title,
@@ -101,7 +96,7 @@ class KamernetScraper(BaseScraper):
                     listings.append(listing)
 
             except Exception as e:
-                logger.error(f"[Kamernet] Error scraping {slug}: {e}")
+                logger.error("[Kamernet] Error scraping %s: %s", slug, e)
 
-        logger.info(f"[Kamernet] Found {len(listings)} matching listings.")
+        logger.info("[Kamernet] Found %d matching listings.", len(listings))
         return listings

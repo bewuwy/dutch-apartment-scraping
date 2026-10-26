@@ -1,147 +1,168 @@
 # Dutch Apartment Hunter
 
-A multi-source scraper, intelligent filter, and Telegram alerting system for the Dutch rental housing market. Designed for the entire Netherlands, with modular support for nationwide portals and regional rental agencies.
-
----
+A Python-based scraper, filter, and Telegram notification tool for the Dutch rental housing market. It monitors national portals (Pararius, Kamernet) and local estate agencies (makelaars), filters listings according to budget and Dutch tenancy conditions, and delivers alerts to Telegram.
 
 ## Features
 
-- **Nationwide & Regional Scraping:**
-  - **Pararius:** Automated search across any Dutch city using Playwright stealth and robust parser logic.
-  - **Kamernet:** Direct Next.js data extraction for rooms, studios, and apartments nationwide.
-  - **Plug-and-Play Local Makelaars:** Dynamic auto-discovery for local agency scrapers. Simply drop any scraper subclassing `BaseScraper` into `scrapers/` and `main.py` runs it automatically.
-  - **Private Branches for Regional Scrapers:** Keep public `main` clean with nationwide portals, while maintaining city-specific agency scrapers on a `private` branch with a separate origin.
-- **Two Execution Modes:**
-  - **Mode 1 (AI Agent Mode):** Zero-effort conversational mode. Invoke the agent in your CLI (Antigravity, Claude Code, AGY CLI) and the AI agent automatically runs the background scrapers, reviews listing descriptions, evaluates Dutch contract nuances (registration, guarantors, pets, temporary contracts), and dispatches ranked alerts.
-  - **Mode 2 (Autonomous Python):** Standalone headless script (`main.py`) suitable for cron jobs or scheduled monitoring. Evaluates listings using heuristic filters and pushes clean alerts to Telegram without requiring an AI agent or external API tokens.
-- **Privacy & Clean Configuration:** All sensitive credentials (`.env`) and personal search criteria (`config.json`) are decoupled and gitignored.
+- **Multi-Source Scraping:**
+  - **Pararius:** Automated search using Playwright for any municipality.
+  - **Kamernet:** Direct Next.js page data extraction for apartments, studios, and rooms.
+  - **Custom Agency Scrapers:** Dynamic auto-discovery for agency scrapers. Dropping any class inheriting from `BaseScraper` into `scrapers/` runs it automatically.
+- **Tenancy-Aware Filtering:**
+  - Evaluates Dutch rental specifics: municipal registration (*gemeente inschrijving*), independent vs. shared accommodation, pet policies, and student/guarantor acceptance.
+  - Hard-eliminates over-budget or rented properties, and flags borderline properties for review.
+- **Deduplication & Alerts:**
+  - Prevents repeat Telegram alerts across runs using persistent ID tracking.
+  - Dry-run mode for previewing alerts locally when Telegram credentials are not configured.
+- **Review CLI:**
+  - `agent_review.py` allows inspecting pending listings, recording detailed verdicts or contract notes, and sending verified alerts.
 
----
+## Installation
 
-## Getting Started
+### Prerequisites
+- Python 3.10+
+- [uv](https://docs.astral.sh/uv/) (recommended) or `pip`
 
-### 1. Setup Environment
+### Setup
 ```bash
+# Clone the repository
+git clone <repo-url>
+cd dutch-apartment-hunter
+
+# Create virtual environment and install dependencies
 uv venv .venv
 source .venv/bin/activate
 uv pip install -e .
+
+# Install Playwright browser binaries
 playwright install chromium
 ```
 
-### 2. Configure Your Search Profile
-You can configure your search criteria either conversationally or manually:
+## Configuration
 
-#### Way A: Conversational Setup via AI Agent (Recommended)
-Ask your AI coding assistant:
-> *"Set up my Dutch housing preferences"* or *"Configure apartment search for [City]"*
-
-The AI agent will interview you regarding your target municipality, budget ceiling, tenant composition, pet requirements, municipal registration (*inschrijving*), and generate `config.json` automatically.
-
-#### Way B: Manual Setup (Without AI)
-Copy the example template and edit it with your preferences:
+### 1. Search Criteria (`config.json`)
+Copy the example template:
 ```bash
 cp config.example.json config.json
 ```
-Edit `config.json` to customize:
-- `search_criteria`: Target city, search radius, max rent, and minimum specs.
-- `tenant_profile`: Occupants count, employment/student status, guarantor needs, and pet policies.
-- `filter_rules`: Strictness for registration, shared housing, and guarantor acceptance.
 
-### 3. Configure Telegram Notifications
-Copy the `.env` template and add your Telegram bot credentials:
+Adjust the parameters to match your search:
+```json
+{
+  "search_criteria": {
+    "location": "amsterdam",
+    "max_rent_eur": 2000,
+    "min_size_m2": 45,
+    "min_bedrooms": 1
+  },
+  "filter_rules": {
+    "reject_roommates_or_shared_housing": true,
+    "reject_single_occupant_only": true,
+    "reject_explicit_no_pets": false,
+    "require_registration_possible": true,
+    "reject_no_students_unless_guarantors_allowed": true
+  },
+  "tenant_profile": {
+    "tenants": "Couple",
+    "occupants_count": 2,
+    "status": "Working professional",
+    "income": "Employment salary",
+    "has_pets": false,
+    "registration_required": true
+  },
+  "telegram": {
+    "max_alerts_per_run": 5
+  }
+}
+```
+
+### 2. Telegram Notifications (`.env`)
+Copy the `.env.example` template:
 ```bash
 cp .env.example .env
 ```
-- `TELEGRAM_BOT_TOKEN`: Your Telegram Bot API token from [@BotFather](https://t.me/BotFather).
-- `TELEGRAM_CHAT_ID`: Your personal or group chat ID (from [@userinfobot](https://t.me/userinfobot)).
 
----
+Configure your Telegram bot credentials:
+- `TELEGRAM_BOT_TOKEN`: Bot token from [@BotFather](https://t.me/BotFather).
+- `TELEGRAM_CHAT_ID`: Chat ID from [@userinfobot](https://t.me/userinfobot) or your channel ID.
 
-## How to Run
+*(If left unconfigured, the system runs in dry-run mode and prints alerts to the terminal).*
 
-### Option 1: AI Agent Mode (Interactive & Managed)
-You do not need to worry about manual script commands or database management. Simply launch your AI CLI agent (e.g. Antigravity, Claude Code) and prompt:
+## Usage
 
-> *"Check for new apartments matching my config and send the best ones to Telegram."*
-
-or invoke the skill directly:
+### Running the Scraper
+Run the full scraping, filtering, and alert pipeline:
 ```bash
-/skill dutch-apartment-hunter
+python main.py
 ```
 
-The AI agent will:
-1. Run the scrapers to update the local listings database.
-2. Review all unvetted or unsure listings, analyzing Dutch contract text and agency policies.
-3. Assign match scores and explanations.
-4. Dispatch the top-ranked verified alerts directly to your Telegram.
-
-### Option 2: Autonomous Python Mode (Headless / Scheduled)
-Run the automated pipeline directly from the command line:
+CLI options:
 ```bash
-uv run python main.py
-```
-- Scrapes all active portals and agencies.
-- Evaluates listings against `config.json` criteria.
-- Sends clean alerts to Telegram (`Rental Alert` or `Rental Alert (Unsure match)`).
-- Queues unvetted listings in `data/listings.json` with `ai_checked: false` ready for future AI agent review.
-
----
-
-## Expanding to Other Dutch Cities & Private Branches
-
-The project is built to easily expand beyond default national portals:
-
-### 1. Change the Target Location
-Updating `location` in `config.json` automatically updates search queries on nationwide portals like Pararius and Kamernet.
-
-### 2. Auto-Discovery for Local Makelaars
-Any scraper placed under `scrapers/` that inherits from `BaseScraper` is automatically discovered and loaded by `main.py` at runtime.
-
-### 3. Scaffold Local Scrapers via AI Agent
-Regional makelaars often have exclusive listings before they reach national aggregators. You can ask your AI agent:
-> *"Find top rental agencies in Utrecht/Rotterdam and build scrapers for them."*
-
-The AI agent will create new scraper modules under `scrapers/<agency>.py`.
-
-### 4. Separate Private Branch for Regional Scrapers
-To keep the public repository clean and vendor-neutral, city-specific scrapers (such as the Leiden agencies) are maintained on a `private` branch with a separate origin:
-
-```bash
-# Push core framework to public repository:
-git checkout main
-git remote add origin git@github.com:youruser/dutch-apartment-hunter.git
-git push -u origin main
-
-# Push regional scrapers to a private repository:
-git checkout private
-git remote add private-origin git@github.com:youruser/dutch-apartment-hunter-private.git
-git push -u private-origin private
+python main.py --config config.json  # Specify a custom config file
+python main.py --no-alert            # Run scrapers and filters without sending alerts
 ```
 
----
+### Reviewing Listings (`agent_review.py`)
+To review unvetted or flagged listings:
+
+```bash
+# 1. View listings awaiting review
+python agent_review.py pending
+
+# 2. Record a verdict for a specific listing
+python agent_review.py update \
+    --id "pararius_8abd13ec" \
+    --verdict STRONG_MATCH \
+    --score 90 \
+    --rationale "Central location, registration permitted, independent apartment." \
+    --pros "Modern kitchen" "Close to station" \
+    --cons "Excludes utilities"
+
+# 3. Send top verified listings to Telegram
+python agent_review.py notify --top 5
+```
+
+## Adding Custom Agency Scrapers
+
+To scrape regional agencies (e.g. 123Wonen, NederWoon, Living Today), create a new file in `scrapers/` inheriting from `BaseScraper`:
+
+```python
+# scrapers/my_agency.py
+from typing import List
+from models import Listing
+from scrapers.base import BaseScraper
+
+class MyAgencyScraper(BaseScraper):
+    def scrape(self) -> List[Listing]:
+        location = self.search_criteria.get("location")
+        max_rent = self.search_criteria.get("max_rent_eur")
+        # Scrape and return a list of Listing objects
+        return []
+```
+
+`main.py` automatically detects and executes any `BaseScraper` subclasses in `scrapers/`.
 
 ## Project Structure
 
 ```text
-├── config.example.json      # Template for search criteria & tenant profile
+├── config.example.json      # Template search criteria and filter rules
 ├── config.json              # (Gitignored) Your active search criteria
-├── .env.example             # Template for Telegram bot tokens
-├── .env                     # (Gitignored) Active Telegram credentials
-├── models.py                # Unified Listing and FilterEvaluation dataclasses
-├── scrapers/                # Scraper modules (Pararius, Kamernet, local makelaars)
-│   ├── base.py              # BaseScraper abstract class
-│   ├── pararius.py          # Pararius scraper (Playwright stealth)
-│   ├── kamernet.py          # Kamernet scraper (Next.js data extraction)
-│   └── ...                  # Regional makelaar scrapers
-├── filters/                 # Heuristic Dutch market filter
-├── notifications/           # Clean Telegram notification dispatcher
-├── main.py                  # Standalone autonomous scraper runner
-├── agent_review.py          # AI agent review & ranking CLI tool
-├── .agents/skills/          # Agent skill definitions (dutch-apartment-hunter)
-└── data/                    # (Gitignored) Scraped listings & alert history
+├── .env.example             # Template for Telegram credentials
+├── .env                     # (Gitignored) Active credentials
+├── models.py                # Listing and FilterEvaluation dataclasses
+├── scrapers/                # Scraper modules
+│   ├── base.py              # BaseScraper abstract base class
+│   ├── pararius.py          # Pararius scraper (Playwright)
+│   └── kamernet.py          # Kamernet scraper (Next.js data extraction)
+├── filters/
+│   └── agent_filter.py      # Tenancy rules and criteria evaluator
+├── notifications/
+│   └── telegram.py          # Telegram alert formatter and dispatcher
+├── main.py                  # Main scraping and filtering pipeline
+├── agent_review.py          # Listing review and curation CLI
+├── pyproject.toml           # Project packaging and dependencies
+└── data/                    # (Gitignored) Cached listings and alert history
 ```
-
----
 
 ## License
 

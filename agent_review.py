@@ -1,7 +1,7 @@
-"""AI Agent review and curation CLI.
+"""Listing review and curation utility.
 
-Used when an AI Agent (e.g., Antigravity CLI / Claude Code) evaluates,
-scores, and curates candidate housing listings without external API tokens.
+Used to inspect pending listings, record detailed review assessments (e.g. contract
+terms, guarantor policies, property condition), and dispatch verified alerts.
 """
 
 import sys
@@ -9,7 +9,7 @@ import os
 import json
 import argparse
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Set
 
 WORKSPACE_ROOT = os.path.dirname(os.path.abspath(__file__))
 if WORKSPACE_ROOT not in sys.path:
@@ -19,7 +19,7 @@ from models import FilterEvaluation
 from notifications.telegram import TelegramNotifier
 
 DATA_FILE = Path(WORKSPACE_ROOT) / "data" / "listings.json"
-AI_ALERTED_FILE = Path(WORKSPACE_ROOT) / "data" / "alerted_ai_ids.json"
+ALERTED_FILE = Path(WORKSPACE_ROOT) / "data" / "alerted_ids.json"
 
 
 def load_evaluations() -> List[FilterEvaluation]:
@@ -37,26 +37,51 @@ def save_evaluations(evaluations: List[FilterEvaluation]) -> None:
         json.dump([e.to_dict() for e in evaluations], f, indent=2, ensure_ascii=False)
 
 
+def load_alerted_ids() -> Set[str]:
+    alerted = set()
+    if ALERTED_FILE.exists():
+        try:
+            with open(ALERTED_FILE, "r", encoding="utf-8") as f:
+                alerted.update(json.load(f))
+        except Exception:
+            pass
+
+    # Read legacy file if it exists
+    legacy_file = ALERTED_FILE.parent / "alerted_ai_ids.json"
+    if legacy_file.exists():
+        try:
+            with open(legacy_file, "r", encoding="utf-8") as f:
+                alerted.update(json.load(f))
+        except Exception:
+            pass
+    return alerted
+
+
+def save_alerted_ids(ids: Set[str]) -> None:
+    ALERTED_FILE.parent.mkdir(exist_ok=True)
+    with open(ALERTED_FILE, "w", encoding="utf-8") as f:
+        json.dump(sorted(list(ids)), f, indent=2)
+
+
 def get_pending_listings() -> List[FilterEvaluation]:
     evaluations = load_evaluations()
-    # Return any listing that hasn't been verified by an AI agent yet
     return [e for e in evaluations if not e.ai_checked and e.status in ("MATCH", "NEEDS_REVIEW")]
 
 
 def list_pending():
     pending = get_pending_listings()
-    print(f"\n📋 FOUND {len(pending)} PENDING LISTINGS AWAITING AI REVIEW\n" + "=" * 65)
+    print(f"\nPending listings for review ({len(pending)}):\n" + "-" * 65)
     for idx, e in enumerate(pending, 1):
         l = e.listing
         print(f"[{idx}] ID: {l.id}")
         print(f"     Title: {l.title} | Source: {l.source.upper()} | €{l.price}/mo")
-        print(f"     Status: {e.status} | Heuristic Score: {e.score}")
+        print(f"     Status: {e.status} | Score: {e.score}")
         print(f"     URL: {l.url}")
         if e.flags:
             print(f"     Flags: {'; '.join(e.flags)}")
         if l.description:
             snippet = l.description.strip().replace("\n", " ")[:250]
-            print(f"     Desc Snippet: {snippet}...")
+            print(f"     Description: {snippet}...")
         print("-" * 65)
 
 
@@ -69,7 +94,7 @@ def update_verdict(listing_id: str, verdict: str, score: int, rationale: str, pr
             break
 
     if not target:
-        print(f"❌ Listing with ID '{listing_id}' not found.")
+        print(f"Error: Listing '{listing_id}' not found.")
         return False
 
     target.ai_checked = True
@@ -89,63 +114,50 @@ def update_verdict(listing_id: str, verdict: str, score: int, rationale: str, pr
         target.status = "NEEDS_REVIEW"
 
     save_evaluations(evaluations)
-    print(f"✅ Listing '{listing_id}' updated by AI: {target.ai_verdict} ({target.ai_score}/100)")
+    print(f"Updated listing '{listing_id}': {target.ai_verdict} ({target.ai_score}/100)")
     return True
 
 
 def notify_verified(top_n: int = 5):
-    from dotenv import load_dotenv
-    load_dotenv()
-
     evaluations = load_evaluations()
-    ai_verified = [e for e in evaluations if e.ai_checked and e.status in ("MATCH", "NEEDS_REVIEW")]
-    # Sort by AI score descending
-    ai_verified.sort(key=lambda e: (e.ai_score or 0), reverse=True)
+    verified = [e for e in evaluations if e.ai_checked and e.status in ("MATCH", "NEEDS_REVIEW")]
+    verified.sort(key=lambda e: (e.ai_score or 0), reverse=True)
 
-    alerted_ids = set()
-    if AI_ALERTED_FILE.exists():
-        try:
-            with open(AI_ALERTED_FILE, "r", encoding="utf-8") as f:
-                alerted_ids = set(json.load(f))
-        except Exception:
-            alerted_ids = set()
-
+    alerted_ids = load_alerted_ids()
     notifier = TelegramNotifier()
-    to_send = [e for e in ai_verified if e.listing.id not in alerted_ids]
+    to_send = [e for e in verified if e.listing.id not in alerted_ids]
 
-    print(f"\n🤖 SENDING {min(len(to_send), top_n)} AI-VERIFIED LISTINGS VIA TELEGRAM\n")
+    count_to_send = min(len(to_send), top_n)
+    print(f"\nSending {count_to_send} verified listings via Telegram...\n")
     sent_count = 0
-    for e in to_send[:top_n]:
-        sent = notifier.send_alert(e, is_ai_mode=True)
+    for e in to_send[:count_to_send]:
+        sent = notifier.send_alert(e)
         if sent:
+            e.alerted = True
             alerted_ids.add(e.listing.id)
             sent_count += 1
 
-    with open(AI_ALERTED_FILE, "w", encoding="utf-8") as f:
-        json.dump(list(alerted_ids), f, indent=2)
-
-    print(f"✅ Dispatched {sent_count} AI-verified alerts.")
+    save_alerted_ids(alerted_ids)
+    save_evaluations(evaluations)
+    print(f"Dispatched {sent_count} alerts.")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="AI Agent Housing Review Utility")
+    parser = argparse.ArgumentParser(description="Housing Review and Curation CLI")
     subparsers = parser.add_subparsers(dest="command")
 
-    # Command: pending
-    subparsers.add_parser("pending", help="List properties pending AI verification")
+    subparsers.add_parser("pending", help="List properties pending review")
 
-    # Command: update
-    update_p = subparsers.add_parser("update", help="Update AI evaluation for a property")
+    update_p = subparsers.add_parser("update", help="Update review evaluation for a property")
     update_p.add_argument("--id", required=True, help="Listing ID")
     update_p.add_argument("--verdict", choices=["STRONG_MATCH", "POTENTIAL_MATCH", "DISQUALIFIED"], required=True)
     update_p.add_argument("--score", type=int, required=True, help="Score 0-100")
-    update_p.add_argument("--rationale", required=True, help="AI rationale/justification")
+    update_p.add_argument("--rationale", required=True, help="Rationale/justification")
     update_p.add_argument("--pros", nargs="*", default=[], help="List of pros")
-    update_p.add_argument("--cons", nargs="*", default=[], help="List of cons/caveats")
+    update_p.add_argument("--cons", nargs="*", default=[], help="List of cons")
 
-    # Command: notify
-    notify_p = subparsers.add_parser("notify", help="Send top AI-verified listings to Telegram")
-    notify_p.add_argument("--top", type=int, default=5, help="Number of listings to send")
+    notify_p = subparsers.add_parser("notify", help="Send top verified listings to Telegram")
+    notify_p.add_argument("--top", type=int, default=5, help="Maximum number of listings to send")
 
     args = parser.parse_args()
 
