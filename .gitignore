@@ -1,0 +1,27 @@
+# Credentials & Secrets
+.env
+.env.*
+!.env.example
+
+# User details & Personal configs
+config.json
+config-*.json
+!config.example.json
+
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Data & Scraper Caches
+data/
+listings_cache.json
+*.log
+
+# Playwright & Browser Binaries
+.playwright/

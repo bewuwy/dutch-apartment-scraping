@@ -1,0 +1,12 @@
+[submodule "external_tools/funda-scraper"]
+	path = external_tools/funda-scraper
+	url = https://github.com/whchien/funda-scraper.git
+[submodule "external_tools/pararius-scraper"]
+	path = external_tools/pararius-scraper
+	url = https://github.com/kami4ka/pararius-scraper.git
+[submodule "external_tools/kamernet-radar"]
+	path = external_tools/kamernet-radar
+	url = https://github.com/jasp-nerd/kamernet-radar.git
+[submodule "external_tools/pyfunda"]
+	path = external_tools/pyfunda
+	url = https://github.com/0xMH/pyfunda.git
