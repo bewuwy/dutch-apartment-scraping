@@ -58,6 +58,9 @@ class FundaScraper(BaseScraper):
 
                     status_str = getattr(item, "status", "") or ""
                     is_available = "verhuurd" not in status_str.lower()
+                    pub_date = getattr(item, "publication_date", None)
+                    if not pub_date and hasattr(item, "characteristic"):
+                        pub_date = item.characteristic("Aangeboden sinds")
 
                     listing = Listing(
                         id=f"funda_{item.id}",
@@ -75,6 +78,7 @@ class FundaScraper(BaseScraper):
                         interior=interior,
                         description=item.description or "",
                         is_available=is_available,
+                        posted_at=str(pub_date) if pub_date else None,
                         raw_data=raw_data,
                     )
                     listings.append(listing)

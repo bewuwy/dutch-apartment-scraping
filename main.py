@@ -5,6 +5,7 @@ import sys
 import json
 import logging
 import argparse
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Tuple
 from pathlib import Path
 from dotenv import load_dotenv
@@ -14,7 +15,7 @@ WORKSPACE_ROOT = os.path.dirname(os.path.abspath(__file__))
 if WORKSPACE_ROOT not in sys.path:
     sys.path.insert(0, WORKSPACE_ROOT)
 
-from models import Listing, FilterEvaluation
+from models import Listing, FilterEvaluation, calculate_posted_days_ago
 from scrapers.base import BaseScraper
 from scrapers.pararius import ParariusScraper
 from scrapers.kamernet import KamernetScraper
@@ -124,10 +125,12 @@ def run_pipeline(config_path: str = None, skip_alerts: bool = False) -> List[Fil
         except Exception as e:
             logger.warning("Could not load previous listings: %s", e)
 
-    # Preserve review metadata on re-scraped listings
+    # Preserve review metadata and publication dates on re-scraped listings
+    now_iso = datetime.now(timezone.utc).isoformat()
     for e in evaluations:
         if e.listing.id in existing_evals:
             prev = existing_evals[e.listing.id]
+            prev_l = prev.get("listing", {})
             e.ai_checked = prev.get("ai_checked", False)
             e.ai_verdict = prev.get("ai_verdict")
             e.ai_score = prev.get("ai_score")
@@ -135,6 +138,13 @@ def run_pipeline(config_path: str = None, skip_alerts: bool = False) -> List[Fil
             e.ai_pros = prev.get("ai_pros", [])
             e.ai_cons = prev.get("ai_cons", [])
             e.alerted = prev.get("alerted", prev.get("alerted_standalone", False) or prev.get("alerted_ai", False))
+            if not e.listing.posted_at and prev_l.get("posted_at"):
+                e.listing.posted_at = prev_l.get("posted_at")
+        elif not e.listing.posted_at:
+            e.listing.posted_at = now_iso
+
+        if e.listing.posted_at and e.listing.posted_days_ago is None:
+            e.listing.posted_days_ago = calculate_posted_days_ago(e.listing.posted_at)
 
     matches = [e for e in evaluations if e.status == "MATCH"]
     reviews = [e for e in evaluations if e.status == "NEEDS_REVIEW"]

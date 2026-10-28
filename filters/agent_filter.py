@@ -164,9 +164,6 @@ class RentalFilter:
                 flags.append("Explicitly permits pets or open in consultation")
                 break
 
-        if pets_allowed is None and status != "REJECTED":
-            flags.append("Pets not mentioned (negotiable per standard practice)")
-
         # 6. Students & Guarantors
         guarantors_allowed = None
         no_students_patterns = [
@@ -262,6 +259,9 @@ class RentalFilter:
             pets_allowed = True
             flags.append("Pets allowed per specifications")
             score += 10
+
+        if pets_allowed is None and status != "REJECTED":
+            flags.append("Pets not mentioned (negotiable per standard practice)")
 
         suitable_persons = listing.raw_data.get("suitable_for_persons")
         if suitable_persons is not None and couples_allowed is None:

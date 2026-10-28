@@ -74,18 +74,20 @@ class ParariusScraper(BaseScraper):
                             logger.debug("[Pararius] Fetching details for %s", url)
                             page.goto(url, wait_until="domcontentloaded", timeout=15000)
                             page.wait_for_timeout(1000)
-                            details = parse_detail_page(page.content())
+                            content = page.content()
+                            details = parse_detail_page(content)
                             description = details.get("description", "")
+                            from bs4 import BeautifulSoup
+                            soup = BeautifulSoup(content, "lxml")
+                            title_elem = soup.select_one(".listing-detail-summary__title, h1.listing-detail-summary__title, .page-title")
+                            if title_elem and not any(w in title_elem.get_text().lower() for w in ("pararius", "listing")):
+                                details["title"] = title_elem.get_text(strip=True)
+                            elif "title" in details and any(w in str(details["title"]).lower() for w in ("pararius", "listing")):
+                                del details["title"]
                             # Merge details into p_data
                             p_data.update(details)
                         except Exception as e:
                             logger.debug("[Pararius] Could not fetch detail page for %s: %s", url, e)
-
-                    title = p_data.get("title") or p_data.get("street_address")
-                    if not title or title == "Pararius Listing":
-                        parts = url.rstrip("/").split("/")
-                        street_slug = parts[-1] if parts else "Property"
-                        title = f"Appartement {street_slug.replace('-', ' ').title()}"
 
                     prop_id = p_data.get("listing_id") or (url.split("/")[-1] if url else f"pararius_{idx}")
 
@@ -101,13 +103,29 @@ class ParariusScraper(BaseScraper):
                     else:
                         ptype = "apartment"
 
+                    title = p_data.get("title") or p_data.get("street_address")
+                    if not title or any(w in title.lower() for w in ("pararius", "listing", "huurwoningen")):
+                        parts = url.rstrip("/").split("/")
+                        street_slug = parts[-1] if parts else "Property"
+                        clean_street = street_slug.replace('-', ' ').title()
+                        type_prefix = "Appartement" if ptype == "apartment" else ptype.capitalize()
+                        title = f"{type_prefix} {clean_street}"
+
+                    address = p_data.get("street_address")
+                    if not address or any(w in address.lower() for w in ("pararius", "listing")):
+                        parts = url.rstrip("/").split("/")
+                        street_slug = parts[-1] if parts else ""
+                        address = street_slug.replace('-', ' ').title() if street_slug else None
+
+                    offered_since = p_data.get("offered_since") or p_data.get("date") or p_data.get("publish_date")
+
                     listing = Listing(
                         id=f"pararius_{prop_id}",
                         title=title,
                         url=url,
                         price=p_data.get("price"),
                         city=p_data.get("city", location.capitalize()),
-                        address=p_data.get("street_address"),
+                        address=address,
                         postal_code=p_data.get("postal_code"),
                         neighborhood=p_data.get("neighborhood"),
                         source="pararius",
@@ -117,6 +135,7 @@ class ParariusScraper(BaseScraper):
                         interior=p_data.get("interior"),
                         description=description,
                         is_available=True,
+                        posted_at=offered_since,
                         raw_data=p_data,
                     )
                     listings.append(listing)

@@ -1,0 +1,13 @@
+{
+  "name": "dutch-apartment-hunter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimalist web UI and scraper pipeline for Dutch rental housing",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "pnpm --dir web build",
+    "start": "node scripts/start.mjs",
+    "lint": "pnpm --dir web lint"
+  }
+}

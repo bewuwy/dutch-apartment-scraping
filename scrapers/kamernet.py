@@ -91,6 +91,7 @@ class KamernetScraper(BaseScraper):
                     rooms = enriched.get("num_rooms") or enriched.get("numberOfRooms")
                     postal_code = enriched.get("postal_code") or enriched.get("postalCode")
                     address = enriched.get("street") or enriched.get("streetName")
+                    publish_date = enriched.get("publish_date") or enriched.get("create_date") or item.get("publish_date")
 
                     listing = Listing(
                         id=f"kamernet_{listing_id}",
@@ -108,6 +109,7 @@ class KamernetScraper(BaseScraper):
                         interior=enriched.get("furnishType"),
                         description=description,
                         is_available=True,
+                        posted_at=publish_date,
                         raw_data=enriched,
                     )
                     listings.append(listing)

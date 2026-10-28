@@ -103,6 +103,24 @@ python main.py --config config.json  # Specify a custom config file
 python main.py --no-alert            # Run scrapers and filters without sending alerts
 ```
 
+### Web UI (Svelte + Pico CSS)
+
+Run the minimalist web UI:
+
+```bash
+# Start backend server & Svelte dev server (with hot reload)
+pnpm dev
+
+# Build the production frontend
+pnpm build
+
+# Start the production server (served at http://localhost:8000)
+pnpm start
+
+# Run Svelte linter
+pnpm lint
+```
+
 ### Reviewing Listings (`agent_review.py`)
 To review unvetted or flagged listings:
 
